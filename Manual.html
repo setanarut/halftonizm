@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <title>halftonizm - User Manual</title>
+</head>
+
+<body>
+    <h3>halftonizm</h3>
+    <p>
+        Generates flow map-based wave/halftone animations, provides previews, and exports as GIF/APNG/PNG.
+    </p>
+
+    <h3>Quick Start</h3>
+    <ol>
+        <li><b>Flow map Layer</b>: Select the layer that determines the flow.</li>
+        <li><b>Artwork layers</b>: Select the group layer for color blending.</li>
+        <li>Adjust parameters, then generate using <b>Build Frames</b>.</li>
+        <li>Watch with <b>Play</b>, and save via <b>Save GIF/APNG/Image Seq</b>.</li>
+    </ol>
+
+    <h3>Parameters</h3>
+    <ul>
+        <li><b>Preset</b>: Selects a predefined setting.</li>
+        <li><b>Wave count</b>: Wave density. Higher values result in denser lines.</li>
+        <li><b>Total frames</b>: Total number of animation frames.</li>
+        <li><b>Waveform</b>: Wave type (triangle, sawtooth, sine).</li>
+        <li><b>Reverse</b>: Reverses the animation direction.</li>
+        <li><b>FPS</b>: Playback and recording frame rate.</li>
+        <li><b>Blending mode</b>: Blending type (HardMix or Smoothstep).</li>
+        <li><b>HardMix</b>: Toggles artwork layer blending on/off.</li>
+        <li><b>Flow map Layer</b>: Source layer used to read the wave phase.</li>
+        <li><b>Artwork layers</b>: Group for base + top layer blending.</li>
+        <li><b>Scale</b>: Output resolution percentage.</li>
+        <li><b>Output size</b>: Final resolution based on the scale.</li>
+    </ul>
+
+    <h3>Buttons</h3>
+    <ul>
+        <li><b>Build Frames</b>: Generates all frames.</li>
+        <li><b>Preview First Frame</b>: Generates only the first frame.</li>
+        <li><b>Play</b>: Play/stop the preview.</li>
+        <li><b>Save GIF</b>: Saves as a GIF file.</li>
+        <li><b>Save APNG</b>: Saves as an APNG file.</li>
+        <li><b>Save Image Seq</b>: Saves frames as a PNG sequence.</li>
+        <li><b>Install NumPy</b>: Installs NumPy (for faster calculations).</li>
+        <li><b>Install Pillow</b>: Installs Pillow (for bicubic scaling and fast export).</li>
+    </ul>
+
+</body>
+
+</html>
