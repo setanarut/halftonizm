@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "/Users/hazs/.vscodium-insiders/extensions/mcunderground.kritaexec-1.0.4/krita-lang"
+    ]
+}
