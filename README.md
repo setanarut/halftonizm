@@ -15,3 +15,10 @@ Krita plugin for generating artistic halftone animation. This repo is the succes
 2. Download the [latest release](https://github.com/setanarut/halftonizm/releases/latest) of the Plugin. Remember where you save the ZIP file.
 
 3. Run Krita. Go to Tools ▸ Scripts ▸ Import Python Plugin from File…
+
+## Layer decomposition
+
+For applications that separate an image into color layers to use with this plugin, please review the following repositories.
+
+1. https://github.com/setanarut/layerbuilder-app
+2. https://github.com/setanarut/decompose
