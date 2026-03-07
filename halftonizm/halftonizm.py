@@ -10,6 +10,7 @@ import ssl
 import site
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 from concurrent.futures import CancelledError, ProcessPoolExecutor, as_completed
@@ -42,6 +43,7 @@ from PyQt5.QtWidgets import (
 
 DOCKER_NAME = "Halftonizm"
 DOCKER_ID = "pykrita_halftonizm"
+PIP_INSTALL_TIMEOUT_SECONDS = 600
 
 ARTWORK_LAYERS_GROUP_NAME = "Artwork layers"
 FLOW_MAP_LAYER_NAME = "Flow Map"
@@ -425,6 +427,7 @@ class Halftonizm(DockWidget):
         self._preset_entries = {}
         self._logo_label = None
         self._logo_source_pixmap = None
+        self._pip_install_timeout_hit = False
         self._build_ui()
         self._sync_result_ratio_from_active_doc()
         app = QApplication.instance()
@@ -651,6 +654,125 @@ class Halftonizm(DockWidget):
             return compact
         return "... (truncated) ...\n{}".format(compact[-limit:])
 
+    def _format_os_error_debug(self, err):
+        if not isinstance(err, OSError):
+            return ""
+        details = []
+        errno_value = getattr(err, "errno", None)
+        if errno_value is not None:
+            details.append("errno={}".format(errno_value))
+        winerror_value = getattr(err, "winerror", None)
+        if winerror_value is not None:
+            details.append("winerror={}".format(winerror_value))
+        strerror_value = getattr(err, "strerror", None)
+        if strerror_value:
+            details.append("strerror={}".format(strerror_value))
+        filename_value = getattr(err, "filename", None)
+        if filename_value:
+            details.append("filename={}".format(filename_value))
+        return ", ".join(details)
+
+    def _permission_debug_hint(self, err, full_log_text):
+        markers = (
+            "permission denied",
+            "access is denied",
+            "winerror 5",
+            "errno 13",
+            "operation not permitted",
+            "not permitted",
+            "requires elevation",
+            "could not install packages due to an oserror",
+        )
+        err_text = str(err or "").lower()
+        log_text = str(full_log_text or "")
+        log_text_lower = log_text.lower()
+        is_permission_issue = isinstance(err, PermissionError) or any(
+            marker in err_text or marker in log_text_lower for marker in markers
+        )
+        if not is_permission_issue:
+            return ""
+
+        hint_parts = ["Permission-related installation issue detected."]
+        os_debug = self._format_os_error_debug(err)
+        if os_debug:
+            hint_parts.append("System error details: {}".format(os_debug))
+
+        relevant_lines = []
+        for raw_line in log_text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lower_line = line.lower()
+            if any(marker in lower_line for marker in markers):
+                relevant_lines.append(line)
+        if len(relevant_lines) > 8:
+            relevant_lines = relevant_lines[-8:]
+        if relevant_lines:
+            hint_parts.append("Relevant pip output:\n{}".format("\n".join(relevant_lines)))
+
+        try:
+            user_sites = site.getusersitepackages()
+            if isinstance(user_sites, str):
+                user_sites = [user_sites]
+            user_sites = [p for p in user_sites if p]
+        except Exception:
+            user_sites = []
+        if user_sites:
+            hint_parts.append("User site-packages paths: {}".format(", ".join(user_sites)))
+
+        hint_parts.append(
+            "Fix suggestion: close Krita, ensure write permission for the paths above, "
+            "then reopen Krita (Run as Administrator if needed)."
+        )
+        return "\n\n".join(hint_parts)
+
+    def _run_task_with_ui_pump(
+        self,
+        fn,
+        progress,
+        progress_label,
+        logs,
+        timeout_seconds=PIP_INSTALL_TIMEOUT_SECONDS,
+    ):
+        worker_error = {"error": None}
+        started_at = time.monotonic()
+
+        def _runner():
+            try:
+                fn()
+            except Exception as err:
+                worker_error["error"] = err
+
+        worker = threading.Thread(
+            target=_runner,
+            name="halftonizm_pip_install",
+            daemon=True,
+        )
+        worker.start()
+
+        while worker.is_alive():
+            elapsed = int(time.monotonic() - started_at)
+            progress.setLabelText("{} ({}s)".format(progress_label, elapsed))
+            QApplication.processEvents()
+            if timeout_seconds and elapsed >= int(timeout_seconds):
+                self._pip_install_timeout_hit = True
+                logs.append(
+                    "Installation watchdog timeout after {} seconds.".format(
+                        int(timeout_seconds)
+                    )
+                )
+                raise TimeoutError(
+                    "Installation timed out after {} seconds and may be stuck. "
+                    "Check firewall/proxy/network settings, then restart Krita and retry.".format(
+                        int(timeout_seconds)
+                    )
+                )
+            time.sleep(0.05)
+
+        worker.join(0.0)
+        if worker_error["error"] is not None:
+            raise worker_error["error"]
+
     def _run_pip_command(self, args):
         try:
             from pip._internal.cli.main import main as pip_main
@@ -681,6 +803,9 @@ class Halftonizm(DockWidget):
             except Exception as err:
                 code = 1
                 print("pip execution failed: {}".format(err))
+                os_debug = self._format_os_error_debug(err)
+                if os_debug:
+                    print("os error details: {}".format(os_debug))
         return code, output.getvalue()
 
     def _configure_pip_tls_environment(self):
@@ -793,6 +918,9 @@ class Halftonizm(DockWidget):
                             code = 1
         except Exception as err:
             print("get-pip execution failed: {}".format(err), file=output)
+            os_debug = self._format_os_error_debug(err)
+            if os_debug:
+                print("os error details: {}".format(os_debug), file=output)
             code = 1
         finally:
             sys.argv = old_argv
@@ -856,6 +984,7 @@ class Halftonizm(DockWidget):
         self._clear_module_prefixes(["certifi", "pip._vendor.certifi"])
 
         invalid_env, cert_path = self._configure_pip_tls_environment()
+        os.environ["PIP_NO_INPUT"] = "1"
         if invalid_env:
             logs.append(
                 "Cleared invalid TLS env vars: {}".format(
@@ -869,26 +998,28 @@ class Halftonizm(DockWidget):
         else:
             logs.append("TLS CA bundle auto-detection failed; using default SSL paths.")
 
+        common_install_args = [
+            "--disable-pip-version-check",
+            "--no-input",
+            "--retries",
+            "1",
+            "--timeout",
+            "45",
+            "--upgrade",
+            package_name,
+        ]
         install_attempts = [
-            ["install", "--disable-pip-version-check", "--upgrade", package_name],
+            ["install"] + common_install_args,
+            ["install", "--user"] + common_install_args,
             [
                 "install",
-                "--disable-pip-version-check",
-                "--user",
-                "--upgrade",
-                package_name,
-            ],
-            [
-                "install",
-                "--disable-pip-version-check",
                 "--trusted-host",
                 "pypi.org",
                 "--trusted-host",
                 "files.pythonhosted.org",
                 "--user",
-                "--upgrade",
-                package_name,
-            ],
+            ]
+            + common_install_args,
         ]
         install_ok = False
         last_output = ""
@@ -935,9 +1066,17 @@ class Halftonizm(DockWidget):
     def _install_package_ui(
         self, package_name, button, status_update_fn, after_install_fn
     ):
+        if self._pip_install_timeout_hit:
+            self._show_error_message(
+                "A previous package installation timed out and may still be running.\n"
+                "Restart Krita before trying another package install."
+            )
+            return
+
         title_name = package_name.strip()
+        progress_label = "Installing {} into Krita Python...".format(title_name)
         progress = QProgressDialog(
-            "Installing {} into Krita Python...".format(title_name), "", 0, 0, self
+            progress_label, "", 0, 0, self
         )
         progress.setWindowTitle("Halftonizm")
         progress.setWindowModality(Qt.WindowModal)
@@ -952,22 +1091,32 @@ class Halftonizm(DockWidget):
             progress.show()
             QApplication.processEvents()
 
-            self._install_package_via_pip(package_name, logs)
-            _ensure_user_site_on_path()
-            after_install_fn()
+            def _install_task():
+                self._install_package_via_pip(package_name, logs)
+                _ensure_user_site_on_path()
+                after_install_fn()
+
+            self._run_task_with_ui_pump(
+                _install_task,
+                progress,
+                progress_label,
+                logs,
+                timeout_seconds=PIP_INSTALL_TIMEOUT_SECONDS,
+            )
             status_update_fn()
             self._show_info_message("{} install complete.".format(title_name))
         except Exception as err:
-            status_update_fn()
-            log_text = self._trim_command_output("\n\n".join(logs))
+            if not self._pip_install_timeout_hit:
+                status_update_fn()
+            full_log_text = "\n\n".join(logs)
+            log_text = self._trim_command_output(full_log_text)
+            permission_hint = self._permission_debug_hint(err, full_log_text)
+            message = "{} installation failed: {}".format(title_name, err)
+            if permission_hint:
+                message = "{}\n\n{}".format(message, permission_hint)
             if log_text:
-                self._show_error_message(
-                    "{} installation failed: {}\n\n{}".format(title_name, err, log_text)
-                )
-            else:
-                self._show_error_message(
-                    "{} installation failed: {}".format(title_name, err)
-                )
+                message = "{}\n\n{}".format(message, log_text)
+            self._show_error_message(message)
         finally:
             progress.reset()
             progress.close()
