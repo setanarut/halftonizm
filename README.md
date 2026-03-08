@@ -6,7 +6,7 @@ Krita plugin for generating artistic cyclic halftone animations. This repo is th
 
 ## Screenshot
 
-<img width="1014" height="793" alt="halftonism_ss" src="https://github.com/user-attachments/assets/6f782761-c6dd-4189-b331-369668fa0723" />
+<img width="1522" height="1531" alt="ss" src="https://github.com/user-attachments/assets/96a5c634-307b-45df-b3ce-1150c13d4c6f" />
 
 ## Plugin Installation
 
