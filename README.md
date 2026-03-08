@@ -1,8 +1,8 @@
 # Halftonizm
 
-Krita plugin for generating artistic halftone animation. This repo is the successor to [this](https://github.com/setanarut/halftonism) repo.
+![4d6c3580-1728-11eb-8f40-1a7b91bbf39d](https://github.com/user-attachments/assets/71035045-b9fd-4eb8-87fd-7e00dbba54d8)
 
-![Krita ORA Screenshot](https://github.com/setanarut/halftonism/blob/main/example/example.gif)
+Krita plugin for generating artistic halftone animation. This repo is the successor to [this](https://github.com/setanarut/halftonism) repo.
 
 ## Screenshot
 
